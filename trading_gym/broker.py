@@ -45,12 +45,15 @@ class Bank():
 
 
 class Portfolio():
-    def __init__(self, cash=1000, order_price=1, sell_price=1):
+    def __init__(self, cash=1000, order_price=0, sell_price=0):
         self.cash = cash
         self.order_price = order_price
         self.sell_price = sell_price
         self.portfolio = {}
         self.bank = Bank()
+
+        self.num_sells = 0
+        self.num_buys = 0
 
     def buy(self, ticker, amount):
         price = self.bank.get_price(ticker)
@@ -63,7 +66,7 @@ class Portfolio():
             self.portfolio[ticker] = 0
 
         self.portfolio[ticker] += 1
-
+        self.num_buys += 1
         return 0
 
     def sell(self, ticker, amount):
@@ -78,7 +81,7 @@ class Portfolio():
 
         self.cash += (price * amount) - self.sell_price
         self.portfolio[ticker] -= amount
-
+        self.num_sells += 1
         return 0
 
     def get_worth(self):
@@ -111,6 +114,9 @@ class BrokerEnv(gym.Env):
     def render(self):
         print("-----------\nState: " + str(self.portfolio.get_state()
                                            [0]) + "\nValue: " + str(self.worth))
+
+        print("Sells: " + str(self.portfolio.num_sells))
+        print("Buys: " + str(self.portfolio.num_buys))
 
     def step(self, action):
         """

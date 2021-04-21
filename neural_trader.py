@@ -27,7 +27,7 @@ num_actions = 3
 
 def create_q_model():
     # Network defined by the Deepmind paper
-    inputs = layers.Input(shape=(1, 200, 4,))
+    inputs = layers.Input(shape=(1, 2, 200, 4,))
 
     x = layers.Flatten()(inputs)
 
@@ -170,6 +170,7 @@ while True:  # Run until solved
             # Log details
             template = "running reward: {:.2f} at episode {}, frame count {}"
             print(template.format(running_reward, episode_count, frame_count))
+            print(env.render())
 
         # Limit the state and reward history
         if len(rewards_history) > max_memory_length:

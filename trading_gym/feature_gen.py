@@ -11,7 +11,7 @@ class FeatureGenerator():
         features = []
 
         for ticker in data:        
-            features.append(data[0])
-
+            features.append(data[1])
+            
         return np.array(features)
 
