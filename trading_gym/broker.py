@@ -9,6 +9,7 @@ from ta import add_all_ta_features
 from ta.utils import dropna
 
 START_INDEX = 0
+MAX_INDEX = 1000
 WINDOW = 200
 AVAILABLE_TICKERS = ["MSFT"]
 
@@ -18,12 +19,14 @@ def fetch_data(period, intervall):
     for ticker in AVAILABLE_TICKERS:
         states.append(yf.Ticker(ticker).history(
             period=period, interval=intervall, auto_adjust=True).reset_index())
+    print("Ticker Length:" + str(len(states[0])))
     return states
 
 
 class Bank():
     def __init__(self, period, interval):
-        self.time = 0
+        self.time = np.random.randint(MAX_INDEX)
+        print(self.time)
         self.tickers = []
 
         states = fetch_data(period, interval)
@@ -115,7 +118,7 @@ class Portfolio():
 class BrokerEnv(gym.Env):
     metadata = {'render.modes': ['human']}
 
-    def __init__(self, period="1y", interval="1h"):
+    def __init__(self, period="10y", interval="1d"):
         self.period = period
         self.interval = interval
         self.reset()
@@ -128,14 +131,16 @@ class BrokerEnv(gym.Env):
     def reset(self):
         self.portfolio = Portfolio(self.period, self.interval)
         self.worth = self.portfolio.get_worth()
+        print("---------RESET--------")
         return self._get_state()
 
     def render(self):
-        print("-----------\nState: " + str(self.portfolio.get_state()
-                                           [0]) + "\nValue: " + str(self.worth))
+        print("State: " + str(self.portfolio.get_state()
+                              [0]) + "\nValue: " + str(self.worth))
 
         print("Sells: " + str(self.portfolio.num_sells))
         print("Buys: " + str(self.portfolio.num_buys))
+        print("-----------\n\n")
 
     def step(self, action):
         """

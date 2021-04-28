@@ -9,7 +9,7 @@ class FeatureGenerator():
         pass
 
     def percent_change(self, data):
-        return np.diff(data) / data[:-1]
+        return np.diff(data) / data[...,:-1]
 
     def generate(self, data):
         features = []
@@ -23,4 +23,4 @@ class FeatureGenerator():
                         ]].to_numpy()
             )
 
-        return np.array(features)
+        return self.percent_change(np.array(features).squeeze().T)

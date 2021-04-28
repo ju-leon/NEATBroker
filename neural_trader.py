@@ -27,7 +27,7 @@ num_actions = 3
 
 def create_q_model():
     # Network defined by the Deepmind paper
-    inputs = layers.Input(shape=(1, 200, 14))
+    inputs = layers.Input(shape=(1, 14, 199))
 
     x = layers.Flatten()(inputs)
 
@@ -127,7 +127,11 @@ while True:  # Run until solved
                 range(len(done_history)), size=batch_size)
 
             # Using list comprehension to sample from replay buffer
+            #print("State History: " + str(state_history))
+            #print("Indices: " + str(indices))
+            # print(np.array(state_history).shape)
             state_sample = np.array([state_history[i] for i in indices])
+            # print(state_sample.shape)
             state_next_sample = np.array(
                 [state_next_history[i] for i in indices])
             rewards_sample = [rewards_history[i] for i in indices]
