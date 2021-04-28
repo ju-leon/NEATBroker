@@ -5,52 +5,66 @@ from gym import error, spaces, utils
 from gym.utils import seeding
 import numpy as np
 
+from ta import add_all_ta_features
+from ta.utils import dropna
+
 START_INDEX = 0
 WINDOW = 200
 AVAILABLE_TICKERS = ["MSFT"]
 
-states = []
-for ticker in AVAILABLE_TICKERS:
-    states.append(yf.Ticker(ticker).history(
-        period="7d", interval="1m", auto_adjust=True).reset_index())
+
+def fetch_data(period, intervall):
+    states = []
+    for ticker in AVAILABLE_TICKERS:
+        states.append(yf.Ticker(ticker).history(
+            period=period, interval=intervall, auto_adjust=True).reset_index())
+    return states
 
 
 class Bank():
-    def __init__(self):
+    def __init__(self, period, interval):
         self.time = 0
         self.tickers = []
-        for state in states:
-            self.tickers.append(
-                state.iloc[START_INDEX:START_INDEX+WINDOW][["High", "Low", "Close", "Volume"]].to_numpy())
 
-        self.tickers = np.array(self.tickers)
-        print(self.tickers.shape)
+        states = fetch_data(period, interval)
+
+        for state in states:
+            state_edit = state.drop(columns=['Dividends', 'Stock Splits'])
+            state_edit = dropna(state_edit)
+            state_edit = state_edit.reset_index()
+            state_edit = add_all_ta_features(
+                state_edit, open="Open", high="High", low="Low", close="Close", volume="Volume", fillna=True)
+
+            self.tickers.append(state_edit)
+            #    state.iloc[START_INDEX:START_INDEX+WINDOW][["High", "Low", "Close", "Volume"]].to_numpy())
+        self.tick()
 
     def get_price(self, ticker):
         index = AVAILABLE_TICKERS.index(ticker)
-        return self.tickers[index][-1][1]
+        return self.state[index].iloc[-1]["Close"]
 
     def get_ticker_states(self):
-        return self.tickers
+        return self.state
 
     def tick(self):
         self.time += 1
 
-        self.tickers = []
-        for state in states:
-            self.tickers.append(
-                state.iloc[START_INDEX+self.time:START_INDEX+WINDOW+self.time][["High", "Low", "Close", "Volume"]].to_numpy())
+        self.state = []
+        for curr in self.tickers:
+            self.state.append(
+                curr.iloc[START_INDEX+self.time:START_INDEX+WINDOW+self.time]
+            )
 
-        self.tickers = np.array(self.tickers)
+        #self.tickers = np.array(self.tickers)
 
 
 class Portfolio():
-    def __init__(self, cash=1000, order_price=0, sell_price=0):
+    def __init__(self, period, interval, cash=1000, order_price=0, sell_price=0):
         self.cash = cash
         self.order_price = order_price
         self.sell_price = sell_price
         self.portfolio = {}
-        self.bank = Bank()
+        self.bank = Bank(period, interval)
 
         self.num_sells = 0
         self.num_buys = 0
@@ -101,15 +115,20 @@ class Portfolio():
 class BrokerEnv(gym.Env):
     metadata = {'render.modes': ['human']}
 
-    def __init__(self):
+    def __init__(self, period="1y", interval="1h"):
+        self.period = period
+        self.interval = interval
         self.reset()
-        self.portfolio = Portfolio()
+        self.portfolio = Portfolio(period, interval)
         self.worth = self.portfolio.get_worth()
 
-    def reset(self):
-        self.portfolio = Portfolio()
-        self.worth = self.portfolio.get_worth()
+    def _get_state(self):
         return self.portfolio.get_state()
+
+    def reset(self):
+        self.portfolio = Portfolio(self.period, self.interval)
+        self.worth = self.portfolio.get_worth()
+        return self._get_state()
 
     def render(self):
         print("-----------\nState: " + str(self.portfolio.get_state()
@@ -120,7 +139,7 @@ class BrokerEnv(gym.Env):
 
     def step(self, action):
         """
-        action: List of tuples with ("TICKER", action) where action: buy=0, sell=1
+        action: List of tuples with ("TICKER", action) where action: buy=0, sell=1, hold=2
         """
         self.portfolio.tick()
 
@@ -136,4 +155,4 @@ class BrokerEnv(gym.Env):
 
         info = AVAILABLE_TICKERS
 
-        return self.portfolio.get_state(), difference, False, info
+        return self._get_state(), difference, False, info

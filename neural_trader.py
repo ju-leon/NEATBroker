@@ -27,7 +27,7 @@ num_actions = 3
 
 def create_q_model():
     # Network defined by the Deepmind paper
-    inputs = layers.Input(shape=(1, 2, 200, 4,))
+    inputs = layers.Input(shape=(1, 200, 14))
 
     x = layers.Flatten()(inputs)
 
@@ -79,12 +79,12 @@ update_target_network = 500
 loss_function = keras.losses.Huber()
 
 while True:  # Run until solved
-    #env.render()
+    # env.render()
     state = feature_gen.generate(env.reset())
     episode_reward = 0
 
     for timestep in range(1, max_steps_per_episode):
-        #env.render()  # Adding this line would show the attempts
+        # env.render()  # Adding this line would show the attempts
         # of the agent in a pop up window.
         frame_count += 1
 
@@ -191,6 +191,6 @@ while True:  # Run until solved
 
     episode_count += 1
 
-    if running_reward > 40:  # Condition to consider the task solved
+    if running_reward > 10000:  # Condition to consider the task solved
         print("Solved at episode {}!".format(episode_count))
         break
