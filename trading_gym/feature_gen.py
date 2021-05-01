@@ -9,7 +9,7 @@ class FeatureGenerator():
         pass
 
     def percent_change(self, data):
-        return np.diff(data) # / data[..., :-1]
+        return np.diff(data)  # / data[..., :-1]
 
     def generate(self, data):
         features = []
@@ -17,9 +17,9 @@ class FeatureGenerator():
         for ticker in data[1]:
             features.append(
                 ticker[["Volume", "Close", "Open", "High", "Low",
-                        "volume_adi", "volume_nvi", "volatility_bbw",
-                        "volatility_kchi", "trend_macd", "trend_sma_slow",
-                        "momentum_rsi", "momentum_kama", "others_dlr"
+                        #"volume_adi", "volume_nvi", "volatility_bbw",
+                        #"volatility_kchi", "trend_macd", "trend_sma_slow",
+                        #"momentum_rsi", "momentum_kama", "others_dlr"
                         ]].to_numpy()
             )
 
@@ -27,8 +27,10 @@ class FeatureGenerator():
 
     def generate_single(self, data):
         ticker = 0
-        return self.percent_change(data[ticker][["Volume", "Close", "Open", "High", "Low",
-                                           "volume_adi", "volume_nvi", "volatility_bbw",
-                                           "volatility_kchi", "trend_macd", "trend_sma_slow",
-                                           "momentum_rsi", "momentum_kama", "others_dlr"
-                                           ]].to_numpy().T)
+        array = self.percent_change(data[ticker][["Volume", "Close", "Open", "High", "Low",
+                                                  #"volume_adi", "volume_nvi", "volatility_bbw",
+                                                  #"volatility_kchi", "trend_macd", "trend_sma_slow",
+                                                  #"momentum_rsi", "momentum_kama", "others_dlr"
+                                                  ]].to_numpy().T)
+
+        return np.array([array], dtype=np.float64)

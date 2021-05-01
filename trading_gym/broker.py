@@ -192,7 +192,7 @@ class BrokerEnvTF(py_environment.PyEnvironment):
             shape=(), dtype=np.int32, minimum=0, maximum=2, name='action')
 
         self._observation_spec = array_spec.BoundedArraySpec(
-            shape=(1, 5, 199,), dtype=np.int32, name='observation')
+            shape=(1, 5, 199,), dtype=np.float64, name='observation')
 
     def action_spec(self):
         return self._action_spec
