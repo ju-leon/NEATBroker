@@ -11,6 +11,16 @@ from ta.utils import dropna
 from trading_gym.feature_gen import FeatureGenerator
 
 
+from tf_agents.environments import py_environment
+from tf_agents.environments import tf_environment
+from tf_agents.environments import tf_py_environment
+from tf_agents.environments import utils
+from tf_agents.specs import array_spec
+from tf_agents.environments import wrappers
+from tf_agents.environments import suite_gym
+from tf_agents.trajectories import time_step as ts
+
+
 START_INDEX = 0
 MAX_INDEX = 1000
 WINDOW = 200
@@ -31,15 +41,12 @@ class Bank():
         self.tickers = []
 
         states = fetch_data(period, interval)
-
-        print(states)
-        
         for state in states:
             state_edit = state.drop(columns=['Dividends', 'Stock Splits'])
             state_edit = dropna(state_edit)
             state_edit = state_edit.reset_index()
-            state_edit = add_all_ta_features(
-                state_edit, open="Open", high="High", low="Low", close="Close", volume="Volume", fillna=True)
+            # state_edit = add_all_ta_features(
+            #    state_edit, open="Open", high="High", low="Low", close="Close", volume="Volume", fillna=True)
 
             self.tickers.append(state_edit)
             #    state.iloc[START_INDEX:START_INDEX+WINDOW][["High", "Low", "Close", "Volume"]].to_numpy())
@@ -51,6 +58,9 @@ class Bank():
 
     def get_ticker_states(self):
         return self.state
+
+    def reached_limit(self):
+        return self.time >= MAX_INDEX
 
     def tick(self):
         self.time += 1
@@ -124,10 +134,9 @@ class BrokerEnv(gym.Env):
     def __init__(self, period="10y", interval="1d"):
         self.period = period
         self.interval = interval
-        self.reset()
-        self.portfolio = Portfolio(period, interval)
-        self.worth = self.portfolio.get_worth()
         self.feature_gen = FeatureGenerator()
+        self.reset()
+        self.worth = self.portfolio.get_worth()
 
     def _get_state(self):
         return self.portfolio.get_state()
@@ -138,9 +147,9 @@ class BrokerEnv(gym.Env):
     def reset(self):
         self.portfolio = Portfolio(self.period, self.interval)
         self.worth = self.portfolio.get_worth()
-        return self._get_state()
+        return self.feature_gen.generate_single(self._get_state()[1])
 
-    def render(self):
+    def render(self, mode):
         print("State: " + str(self.portfolio.get_state()
                               [0]) + "\nValue: " + str(self.worth))
 
@@ -152,7 +161,7 @@ class BrokerEnv(gym.Env):
         """
         action: List of tuples with ("TICKER", action) where action: buy=0, sell=1, hold=2
         """
-        action = [("AAPL", action)]
+        action = [("MSFT", action)]
         self.portfolio.tick()
 
         outcome = 0
@@ -165,6 +174,84 @@ class BrokerEnv(gym.Env):
         difference = self.portfolio.get_worth() - self.worth
         self.worth = self.portfolio.get_worth()
 
-        info = AVAILABLE_TICKERS
+        info = {"tickers": AVAILABLE_TICKERS}
 
         return self.feature_gen.generate_single(self._get_state()[1]), difference, False, info
+
+
+class BrokerEnvTF(py_environment.PyEnvironment):
+
+    def __init__(self, period="10y", interval="1d"):
+        self.period = period
+        self.interval = interval
+        self.feature_gen = FeatureGenerator()
+        self.reset()
+        self.worth = self.portfolio.get_worth()
+
+        self._action_spec = array_spec.BoundedArraySpec(
+            shape=(), dtype=np.int32, minimum=0, maximum=2, name='action')
+
+        self._observation_spec = array_spec.BoundedArraySpec(
+            shape=(1, 5, 199,), dtype=np.int32, name='observation')
+
+    def action_spec(self):
+        return self._action_spec
+
+    def observation_spec(self):
+        return self._observation_spec
+
+    def get_portfolio(self):
+        return self.portfolio
+
+    def _reset(self):
+        self.portfolio = Portfolio(self.period, self.interval)
+        self.worth = self.portfolio.get_worth()
+        return ts.restart(
+            #np.array([[0, 2], [2, 3]], dtype=np.int32),
+            self.feature_gen.generate_single(self._get_state()[1]),
+        )
+
+    def _render(self, mode):
+        print("State: " + str(self.portfolio.get_state()
+                              [0]) + "\nValue: " + str(self.worth))
+
+        print("Sells: " + str(self.portfolio.num_sells))
+        print("Buys: " + str(self.portfolio.num_buys))
+        print("-----------\n\n")
+
+    def _get_state(self):
+        return self.portfolio.get_state()
+
+    def _step(self, action):
+        """
+        action: List of tuples with ("TICKER", action) where action: buy=0, sell=1, hold=2
+        """
+        action = [("MSFT", action)]
+        self.portfolio.tick()
+
+        outcome = 0
+        for (ticker, order) in action:
+            if order == 0:
+                outcome += self.portfolio.buy(ticker, 1)
+            elif order == 1:
+                outcome += self.portfolio.sell(ticker, 1)
+
+        difference = self.portfolio.get_worth() - self.worth
+        self.worth = self.portfolio.get_worth()
+
+        info = {"tickers": AVAILABLE_TICKERS}
+
+        """
+        When time limit is reached return termination to avoid out of bounds
+        """
+        if self.portfolio.bank.reached_limit():
+            return ts.termination(
+                self.feature_gen.generate_single(self._get_state()[1]),
+                reward=difference,
+            )
+
+        return ts.transition(
+            self.feature_gen.generate_single(self._get_state()[1]),
+            reward=difference,
+            discount=0.1
+        )
