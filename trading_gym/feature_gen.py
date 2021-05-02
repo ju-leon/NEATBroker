@@ -12,25 +12,37 @@ class FeatureGenerator():
         return np.diff(data)  # / data[..., :-1]
 
     def generate(self, data):
-        features = []
+        if "MSFT" in data[0]["stocks"]:
+            can_sell = 1 if (data[0]["stocks"]["MSFT"] > 0) else 0
+        else:
+            can_sell = 0
 
+        can_buy = 1 if data[0]["cash"] > data[1][0].iloc[-1]["Close"] else 0
+
+        features = []
         for ticker in data[1]:
             features.append(
-                ticker[["Volume", "Close", "Open", "High", "Low",
-                        #"volume_adi", "volume_nvi", "volatility_bbw",
-                        #"volatility_kchi", "trend_macd", "trend_sma_slow",
-                        #"momentum_rsi", "momentum_kama", "others_dlr"
-                        ]].to_numpy()
+                self.percent_change(
+                    ticker[["Volume", "Close", "Open", "High", "Low",
+                            # "volume_adi", "volume_nvi", "volatility_bbw",
+                            # "volatility_kchi", "trend_macd", "trend_sma_slow",
+                            # "momentum_rsi", "momentum_kama", "others_dlr"
+                            ]].to_numpy().T
+                )
             )
 
-        return self.percent_change(np.array(features).squeeze().T)
+        features = np.array(features).flatten().tolist()
+
+        features += [can_buy, can_sell]
+
+        return np.array(features).reshape(1, -1)
 
     def generate_single(self, data):
         ticker = 0
         array = self.percent_change(data[ticker][["Volume", "Close", "Open", "High", "Low",
-                                                  #"volume_adi", "volume_nvi", "volatility_bbw",
-                                                  #"volatility_kchi", "trend_macd", "trend_sma_slow",
-                                                  #"momentum_rsi", "momentum_kama", "others_dlr"
+                                                  # "volume_adi", "volume_nvi", "volatility_bbw",
+                                                  # "volatility_kchi", "trend_macd", "trend_sma_slow",
+                                                  # "momentum_rsi", "momentum_kama", "others_dlr"
                                                   ]].to_numpy().T)
 
-        return np.array([array], dtype=np.float64)
+        return np.array([array], dtype=np.float64).reshape(1, -1)

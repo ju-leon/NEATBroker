@@ -22,7 +22,7 @@ from tf_agents.trajectories import time_step as ts
 
 
 START_INDEX = 0
-MAX_INDEX = 1000
+MAX_INDEX = 2000
 WINDOW = 200
 AVAILABLE_TICKERS = ["MSFT"]
 
@@ -37,7 +37,7 @@ def fetch_data(period, intervall):
 
 class Bank():
     def __init__(self, period, interval):
-        self.time = np.random.randint(MAX_INDEX)
+        self.time = np.random.randint(low=0, high=MAX_INDEX-WINDOW)
         self.tickers = []
 
         states = fetch_data(period, interval)
@@ -47,7 +47,6 @@ class Bank():
             state_edit = state_edit.reset_index()
             # state_edit = add_all_ta_features(
             #    state_edit, open="Open", high="High", low="Low", close="Close", volume="Volume", fillna=True)
-
             self.tickers.append(state_edit)
             #    state.iloc[START_INDEX:START_INDEX+WINDOW][["High", "Low", "Close", "Volume"]].to_numpy())
         self.tick()
@@ -65,6 +64,9 @@ class Bank():
     def tick(self):
         self.time += 1
 
+        # if self.time % 100 == 0:
+        #    print("Time: " + str(self.time))
+
         self.state = []
         for curr in self.tickers:
             self.state.append(
@@ -77,9 +79,9 @@ class Bank():
 class Portfolio():
     def __init__(self, period, interval, cash=1000, order_price=0, sell_price=0):
         self.cash = cash
+        self.portfolio = {"cash": cash, "stocks": {}}
         self.order_price = order_price
         self.sell_price = sell_price
-        self.portfolio = {}
         self.bank = Bank(period, interval)
 
         self.num_sells = 0
@@ -92,32 +94,38 @@ class Portfolio():
 
         self.cash -= price + self.order_price
 
-        if ticker not in self.portfolio:
-            self.portfolio[ticker] = 0
+        self.portfolio["cash"] = self.cash
 
-        self.portfolio[ticker] += 1
+        if ticker not in self.portfolio["stocks"]:
+            self.portfolio["stocks"][ticker] = 0
+
+        self.portfolio["stocks"][ticker] += 1
         self.num_buys += 1
         return 0
 
     def sell(self, ticker, amount):
 
-        if not ticker in self.portfolio:
+        if not ticker in self.portfolio["stocks"]:
             return -1
 
-        if self.portfolio[ticker] < amount:
+        if self.portfolio["stocks"][ticker] < amount:
             return -1
 
         price = self.bank.get_price(ticker)
 
         self.cash += (price * amount) - self.sell_price
-        self.portfolio[ticker] -= amount
+
+        self.portfolio["cash"] = self.cash
+
+        self.portfolio["stocks"][ticker] -= amount
         self.num_sells += 1
         return 0
 
     def get_worth(self):
         worth = self.cash
-        for ticker in self.portfolio:
-            worth += self.portfolio[ticker] * self.bank.get_price(ticker)
+        for ticker in self.portfolio["stocks"]:
+            worth += self.portfolio["stocks"][ticker] * \
+                self.bank.get_price(ticker)
 
         return worth
 
@@ -147,7 +155,7 @@ class BrokerEnv(gym.Env):
     def reset(self):
         self.portfolio = Portfolio(self.period, self.interval)
         self.worth = self.portfolio.get_worth()
-        return self.feature_gen.generate_single(self._get_state()[1])
+        return self.feature_gen.generate(self._get_state())
 
     def render(self, mode):
         print("State: " + str(self.portfolio.get_state()
@@ -176,7 +184,7 @@ class BrokerEnv(gym.Env):
 
         info = {"tickers": AVAILABLE_TICKERS}
 
-        return self.feature_gen.generate_single(self._get_state()[1]), difference, False, info
+        return self.feature_gen.generate(self._get_state()), difference, False, info
 
 
 class BrokerEnvTF(py_environment.PyEnvironment):
@@ -192,7 +200,7 @@ class BrokerEnvTF(py_environment.PyEnvironment):
             shape=(), dtype=np.int32, minimum=0, maximum=2, name='action')
 
         self._observation_spec = array_spec.BoundedArraySpec(
-            shape=(1, 5, 199,), dtype=np.float64, name='observation')
+            shape=(1, 997,), dtype=np.float64, name='observation')
 
     def action_spec(self):
         return self._action_spec
@@ -208,7 +216,7 @@ class BrokerEnvTF(py_environment.PyEnvironment):
         self.worth = self.portfolio.get_worth()
         return ts.restart(
             #np.array([[0, 2], [2, 3]], dtype=np.int32),
-            self.feature_gen.generate_single(self._get_state()[1]),
+            self.feature_gen.generate(self._get_state()),
         )
 
     def _render(self, mode):
@@ -229,14 +237,22 @@ class BrokerEnvTF(py_environment.PyEnvironment):
         action = [("MSFT", action)]
         self.portfolio.tick()
 
+        difference = 0
         outcome = 0
         for (ticker, order) in action:
             if order == 0:
                 outcome += self.portfolio.buy(ticker, 1)
             elif order == 1:
                 outcome += self.portfolio.sell(ticker, 1)
+            else:
+                # Punish for not performing an action
+                difference = -10
 
-        difference = self.portfolio.get_worth() - self.worth
+        difference += self.portfolio.get_worth() - self.worth
+
+        # Punish illegal action
+        difference += 10 * outcome
+
         self.worth = self.portfolio.get_worth()
 
         info = {"tickers": AVAILABLE_TICKERS}
@@ -246,12 +262,12 @@ class BrokerEnvTF(py_environment.PyEnvironment):
         """
         if self.portfolio.bank.reached_limit():
             return ts.termination(
-                self.feature_gen.generate_single(self._get_state()[1]),
+                self.feature_gen.generate(self._get_state()),
                 reward=difference,
             )
 
         return ts.transition(
-            self.feature_gen.generate_single(self._get_state()[1]),
+            self.feature_gen.generate(self._get_state()),
             reward=difference,
             discount=0.1
         )
